@@ -8,11 +8,10 @@ import java.util.Map.Entry;
 public class PeerDetector {
     private static final int PROTOCOL_PORT = 12345;
     private static final long SEND_DELAY_MILLIS = 1000;
-    private static final long TIMEOUT_MILLIS = 10000;
 
     private MulticastSocket socket;
     private InetAddress groupAddress;
-    private HashMap<InetAddress, Long> peerTable;
+    private PeerTable peerTable = new PeerTable();
 
     PeerDetector(String groupAddressString) throws PeerDetectorAddressException, IOException {
         try {
@@ -32,8 +31,6 @@ public class PeerDetector {
 
             socket = new MulticastSocket(PROTOCOL_PORT);
             socket.joinGroup(groupAddress);
-
-            peerTable = new HashMap<>();
         } catch (UnknownHostException e) {
             throw new PeerDetectorAddressException(
                 String.format("Address %s is invalid", groupAddressString), e
@@ -47,7 +44,7 @@ public class PeerDetector {
         }
 
         try {
-            reprintTable();
+            peerTable.print();
             DatagramPacket sendPacket = new DatagramPacket(new byte[0], 0, 0, groupAddress, PROTOCOL_PORT);
             DatagramPacket recvPacket = new DatagramPacket(new byte[0], 0);
 
@@ -68,47 +65,15 @@ public class PeerDetector {
                     }
 
                     InetAddress senderAddress = recvPacket.getAddress();
-                    refreshTable(senderAddress);
-                    reprintTable();
+                    peerTable.refresh(senderAddress);
+                    peerTable.print();
                 }
 
-                doTableCleanup();
+                peerTable.doCleanup();
             }
         } finally {
             socket.leaveGroup(groupAddress);
             socket.close();
-        }
-    }
-
-    private void refreshTable(InetAddress peerAddress) {
-        peerTable.put(peerAddress, System.currentTimeMillis());
-    }
-
-    private void reprintTable() {
-        clearScreen();
-
-        System.out.println("Peers list:");
-        System.out.println("Address\t\t\tLast time seen");
-        for (Entry<InetAddress, Long> peerTableEntry: peerTable.entrySet()) {
-            InetAddress peerAddress = peerTableEntry.getKey();
-            Date lastTimeSeen = new Date(peerTableEntry.getValue());
-            System.out.println(String.format("%s\t\t%s", peerAddress.toString(), lastTimeSeen.toString()));
-        }
-    }
-
-    private void clearScreen() {
-        System.out.print("\033[H\033[2J");
-        System.out.flush();
-    }
-
-    private void doTableCleanup() {
-        Iterator<Entry<InetAddress, Long>> it = peerTable.entrySet().iterator();
-        while (it.hasNext()) {
-            Entry<InetAddress, Long> peerTableEntry = it.next();
-            long lastTimeSeen = peerTableEntry.getValue();
-            if (System.currentTimeMillis() - lastTimeSeen >= TIMEOUT_MILLIS) {
-                it.remove();
-            }
         }
     }
 }
