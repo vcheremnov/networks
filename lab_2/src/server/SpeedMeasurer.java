@@ -1,65 +1,40 @@
 package server;
 
-import java.io.IOException;
-import java.net.Inet4Address;
-import java.net.InetAddress;
-import java.util.HashMap;
 import java.util.Iterator;
-import java.util.PrimitiveIterator;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class SpeedMeasurer {
-    private ExecutorService executor = Executors.newSingleThreadExecutor();
-    private static final long MEASURE_DELAY_MILLIS = 1000;
+public class SpeedMeasurer implements Runnable {
+    private static final long MEASURE_DELAY_SECS = 3;
     private static final long MILLIS_PER_SEC = 1000;
 
-    private boolean isStarted = false;
-    private final HashMap<ConnectionManager, Long> downloadedBytes = new HashMap<>();
+    private final ConcurrentHashMap<ConnectionManager, Long> downloadedBytes = new ConcurrentHashMap<>();
 
-    public void start() {
-        synchronized (this) {
-            if (isStarted) {
-                throw new RuntimeException("SpeedMeasurer instance has been already started");
-            }
-            isStarted = true;
-        }
+    @Override
+    public void run() {
+        try {
+            while (!Thread.currentThread().isInterrupted()) {
+                Thread.sleep(MEASURE_DELAY_SECS * MILLIS_PER_SEC);
+                clearScreen();
 
-        executor.submit(() -> {
-            try {
-                while (!Thread.currentThread().isInterrupted()) {
-                    Thread.sleep(MEASURE_DELAY_MILLIS);
-                    clearScreen();
-
-                    Iterator<ConnectionManager> it = downloadedBytes.keySet().iterator();
-                    while (it.hasNext()) {
-                        ConnectionManager connectionManager = it.next();
-                        if (!connectionManager.isActive()) {
-                            it.remove();
-                        }
-
-                        long curTotalBytesReceived = connectionManager.getTotalBytesReceived();
-                        long prevTotalBytesReceived = downloadedBytes.put(connectionManager, curTotalBytesReceived);
-                        long bytesDownloaded = curTotalBytesReceived - prevTotalBytesReceived;
-                        double downloadSpeed = (double) bytesDownloaded / MEASURE_DELAY_MILLIS * MILLIS_PER_SEC;
-                        printConnectionInfo(connectionManager, downloadSpeed, bytesDownloaded);
+                Iterator<ConnectionManager> it = downloadedBytes.keySet().iterator();
+                while (it.hasNext()) {
+                    ConnectionManager connectionManager = it.next();
+                    if (!connectionManager.isActive()) {
+                        it.remove();
                     }
 
+                    ConnectionInfo connectionInfo = calculateConnectionInfo(connectionManager);
+                    printConnectionInfo(connectionInfo);
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-    }
 
-    public void stop() {
-        executor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     public void submitConnectionManager(ConnectionManager connectionManager) {
-        synchronized (downloadedBytes) {
-            downloadedBytes.putIfAbsent(connectionManager, 0L);
-        }
+        downloadedBytes.putIfAbsent(connectionManager, 0L);
     }
 
     private void clearScreen() {
@@ -67,10 +42,34 @@ public class SpeedMeasurer {
         System.out.flush();
     }
 
-    private void printConnectionInfo(ConnectionManager connectionManager, double downloadSpeed, long bytesDownloaded) {
-        String remoteAddress = connectionManager.getRemoteAddress().toString();
-        long expectedFileLength = connectionManager.getExpectedFileLength();
-        System.out.println(String.format("%s: %.2f B/s, downloaded %d/%s",
-                remoteAddress, downloadSpeed, bytesDownloaded, expectedFileLength >= 0 ? expectedFileLength : "?"));
+    private ConnectionInfo calculateConnectionInfo(ConnectionManager connectionManager) {
+        long curTotalBytesReceived = connectionManager.getTotalBytesReceived();
+        long prevTotalBytesReceived = downloadedBytes.put(connectionManager, curTotalBytesReceived);
+        long downloadDuration = connectionManager.getDownloadDuration();
+
+        ConnectionInfo connectionInfo = new ConnectionInfo();
+        connectionInfo.setRemoteAddress(connectionManager.getRemoteAddress());
+        connectionInfo.setRemotePort(connectionManager.getRemotePort());
+        connectionInfo.setFileLength(connectionManager.getExpectedFileLength());
+        connectionInfo.setTotalBytesDownloaded(curTotalBytesReceived);
+        connectionInfo.setBytesPerSecond((curTotalBytesReceived - prevTotalBytesReceived) / MEASURE_DELAY_SECS);
+        connectionInfo.setAverageBytesPerSecond(
+                (downloadDuration == 0) ? curTotalBytesReceived : (curTotalBytesReceived / downloadDuration)
+        );
+
+        return connectionInfo;
+    }
+
+    private void printConnectionInfo(ConnectionInfo connectionInfo) {
+        String remoteAddress = String.format("%s:%d", connectionInfo.getRemoteAddress(), connectionInfo.getRemotePort());
+        long bytesPerSecond = connectionInfo.getBytesPerSecond();
+        long averageBytesPerSecond = connectionInfo.getAverageBytesPerSecond();
+        long bytesDownloaded = connectionInfo.getTotalBytesDownloaded();
+
+        long fileLength = connectionInfo.getFileLength();
+        String expectedFileLength = (fileLength >= 0) ? Long.toString(fileLength) : "???";
+
+        System.out.println(String.format("%s: %d B/s current, %d B/s average, %d/%s bytes downloaded",
+                remoteAddress, bytesPerSecond, averageBytesPerSecond, bytesDownloaded, expectedFileLength));
     }
 }

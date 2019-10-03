@@ -1,10 +1,13 @@
 import java.io.IOException;
 
 public class MainClass {
+    private static final int CLI_ARGS_NUMBER = 1;
+    private static final int FAILURE_EXIT_CODE = -1;
+
     public static void main(String[] args) {
-        if (args.length != 1) {
+        if (args.length != CLI_ARGS_NUMBER) {
             printUsage();
-            System.exit(-1);
+            System.exit(FAILURE_EXIT_CODE);
         }
 
         try {
@@ -18,7 +21,7 @@ public class MainClass {
             System.err.println(e.getMessage());
         }
 
-        System.exit(-1);
+        System.exit(FAILURE_EXIT_CODE);
     }
 
     private static void printUsage() {

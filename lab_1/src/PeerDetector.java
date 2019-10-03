@@ -69,7 +69,10 @@ public class PeerDetector {
                     peerTable.print();
                 }
 
-                peerTable.doCleanup();
+                boolean tableHasChanged = peerTable.doCleanup();
+                if (tableHasChanged) {
+                    peerTable.print();
+                }
             }
         } finally {
             socket.leaveGroup(groupAddress);

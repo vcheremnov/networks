@@ -10,14 +10,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class FileTransferServer implements Runnable, Closeable {
-    private int port;
     private ServerSocket serverSocket;
-    private HashMap<ConnectionManager, Long> ;
 
     public FileTransferServer(int port) throws IOException {
-        this.port = port;
         serverSocket = new ServerSocket(port);
-        connectionHandlers = new ArrayList<>();
     }
 
     @Override
@@ -26,7 +22,7 @@ public class FileTransferServer implements Runnable, Closeable {
         ExecutorService threadPool = Executors.newCachedThreadPool();
 
         try {
-            speedMeasurer.start();
+            threadPool.submit(speedMeasurer);
             while (!Thread.currentThread().isInterrupted()) {
                 Socket socket = serverSocket.accept();
                 ConnectionManager connectionManager = new ConnectionManager(socket);
@@ -37,7 +33,6 @@ public class FileTransferServer implements Runnable, Closeable {
             System.err.println(e.getMessage());
         } finally {
             threadPool.shutdownNow();
-            speedMeasurer.stop();
         }
     }
 

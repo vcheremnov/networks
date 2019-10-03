@@ -13,15 +13,19 @@ public class PeerTable {
         peerTable.put(peerAddress, System.currentTimeMillis());
     }
 
-    public void doCleanup() {
+    public boolean doCleanup() {
+        boolean tableHasChanged = false;
         Iterator<Map.Entry<InetAddress, Long>> it = peerTable.entrySet().iterator();
         while (it.hasNext()) {
             Map.Entry<InetAddress, Long> peerTableEntry = it.next();
             long lastTimeSeen = peerTableEntry.getValue();
             if (System.currentTimeMillis() - lastTimeSeen >= TIMEOUT_MILLIS) {
                 it.remove();
+                tableHasChanged = true;
             }
         }
+
+        return tableHasChanged;
     }
 
     public void print() {

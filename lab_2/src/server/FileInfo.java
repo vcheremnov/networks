@@ -1,8 +1,8 @@
 package server;
 
 public class FileInfo {
-    private long fileLength = 0;
-    private String filename = "";
+    private long fileLength;
+    private String filename;
 
     public long getFileLength() {
         return fileLength;
